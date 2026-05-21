@@ -1,0 +1,69 @@
+name: Build (Windows + Ubuntu amd64)
+
+# Builds the zxing-cpp libraries, C-API and CLI tools (ZXingReader/ZXingWriter)
+# for Windows (MSVC, x64) and Ubuntu amd64, in both shared and static linkage,
+# and uploads the install tree (lib + headers + bin) as downloadable artifacts.
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:   # allow manual runs from the Actions tab
+
+env:
+  BUILD_TYPE: Release
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }} / ${{ matrix.linkage }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  arch: amd64, linkage: shared, shared: "ON"  }
+          - { os: ubuntu-latest,  arch: amd64, linkage: static, shared: "OFF" }
+          - { os: windows-latest, arch: amd64, linkage: shared, shared: "ON"  }
+          - { os: windows-latest, arch: amd64, linkage: static, shared: "OFF" }
+
+    steps:
+    - name: Checkout (with submodules)
+      uses: actions/checkout@v4
+      with:
+        submodules: true   # pulls in the 'zint' submodule used by the writer backend
+
+    - name: Configure
+      run: >
+        cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+        -DBUILD_SHARED_LIBS=${{ matrix.shared }}
+        -DZXING_READERS=ON
+        -DZXING_WRITERS=ON
+        -DZXING_C_API=ON
+        -DZXING_EXAMPLES=ON
+        -DZXING_EXAMPLES_QT=OFF
+        -DZXING_UNIT_TESTS=OFF
+        -DZXING_BLACKBOX_TESTS=OFF
+        -DZXING_PYTHON_MODULE=OFF
+
+    - name: Build
+      run: cmake --build build --parallel --config ${{ env.BUILD_TYPE }}
+
+    - name: Install
+      run: cmake --install build --config ${{ env.BUILD_TYPE }} --prefix install
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: zxing-cpp-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.linkage }}
+        path: install
+        if-no-files-found: error

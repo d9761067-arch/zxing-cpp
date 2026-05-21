@@ -25,3 +25,7 @@ CMakeLists.txt.user
 
 # Visual Studio Code
 /.vscode
+
+# Claude Code agent memory
+/.claude
+/install
